@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TCDD Bilet Arama</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #1C2331;
+            color: white;
+        }
+        .card {
+            background-color: #2c3e50;
+            margin-bottom: 15px;
+            transition: transform 0.3s;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+        .btn-primary {
+            background-color: #FFA500;
+            border-color: #FFA500;
+        }
+        .btn-primary:hover {
+            background-color: #FF8C00;
+            border-color: #FF8C00;
+        }
+        .form-control, .form-select {
+            background-color: #34495e;
+            color: white;
+            border-color: #4a5568;
+        }
+        .form-control:focus, .form-select:focus {
+            background-color: #34495e;
+            color: white;
+        }
+        .navbar {
+            background-color: #1C2331;
+        }
+        .footer {
+            background-color: #1C2331;
+            color: #6c757d;
+            padding: 20px 0;
+            margin-top: 40px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#">TCDD Bilet Arama</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#">Ana Sayfa</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#">Biletlerim</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-5">
+        <div class="row">
+            <div class="col-md-12 mb-4">
+                <h2>Nereye Gitmek İstersiniz?</h2>
+                <p class="text-muted">Tren bileti aramak için aşağıdaki formu doldurun.</p>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card p-4">
+                    <div th:if="${error}" class="alert alert-danger mb-4" role="alert" th:text="${error}">
+                        Hata mesajı burada görüntülenecek
+                    </div>
+                    <form th:action="@{/tickets/search}" th:object="${searchRequest}" method="post">
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label for="from" class="form-label">Nereden</label>
+                                <select class="form-select" id="from" th:field="*{from}" required>
+                                    <option value="">Seçiniz</option>
+                                    <option th:each="station : ${stations}" th:value="${station.name}" th:text="${station.name}"></option>
+                                </select>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="to" class="form-label">Nereye</label>
+                                <select class="form-select" id="to" th:field="*{to}" required>
+                                    <option value="">Seçiniz</option>
+                                    <option th:each="station : ${stations}" th:value="${station.name}" th:text="${station.name}"></option>
+                                </select>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="date" class="form-label">Tarih</label>
+                                <input type="date" class="form-control" id="date" th:field="*{date}" required>
+                            </div>
+                        </div>
+                        <div class="text-center mt-3">
+                            <button type="submit" class="btn btn-primary px-5">
+                                <i class="bi bi-search me-2"></i> Bileti Hemen Bul
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-5" th:if="${tickets != null}">
+            <div class="col-md-12 mb-4">
+                <h3>Bulunan Biletler</h3>
+                <p class="text-muted" th:if="${tickets.empty}">Aradığınız kriterlere uygun bilet bulunamadı.</p>
+            </div>
+
+            <div class="col-md-12">
+                <div class="row">
+                    <div class="col-md-6 mb-4" th:each="ticket, stat : ${tickets}">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <h5 class="card-title" th:text="${ticket.trenAdi}">Tren Adı</h5>
+                                <h6 class="card-subtitle mb-2 text-muted" th:text="${ticket.trenTipi}">Tren Tipi</h6>
+                                
+                                <div class="d-flex justify-content-between mt-3">
+                                    <div>
+                                        <p class="mb-0 text-muted">Kalkış</p>
+                                        <p class="mb-0" th:text="${ticket.binisTarih}">Kalkış Tarihi</p>
+                                    </div>
+                                    <div>
+                                        <p class="mb-0 text-muted">Varış</p>
+                                        <p class="mb-0" th:text="${ticket.inisTarih}">Varış Tarihi</p>
+                                    </div>
+                                </div>
+                                
+                                <div class="mt-3">
+                                    <p class="mb-0 text-muted">Sefer ID</p>
+                                    <p class="mb-0" th:text="${ticket.seferId}">Sefer ID</p>
+                                </div>
+                                
+                                <div class="mt-3">
+                                    <p class="mb-0 text-muted">Gün Notu</p>
+                                    <p class="mb-0" th:text="${ticket.gunNotu}">Gün Notu</p>
+                                </div>
+                                
+                                <div class="mt-4 text-center">
+                                    <a th:href="@{/tickets/details(index=${stat.index}, from=${searchRequest.from}, to=${searchRequest.to}, date=${searchRequest.date})}" class="btn btn-primary">
+                                        Detayları Görüntüle
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer mt-5">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <p>&copy; 2023 TCDD Bilet Arama</p>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <p>İleri Java Uygulamaları Projesi</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html> 
