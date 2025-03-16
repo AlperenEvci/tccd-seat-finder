@@ -3,28 +3,38 @@ package com.ilerijava.tcdd.entegration.service;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.stream.Collectors;
 
 import com.ilerijava.tcdd.entegration.DTO.SeferRequestDto;
 import com.ilerijava.tcdd.entegration.DTO.SeferResponseDto;
+import com.ilerijava.tcdd.entegration.DTO.SeferResponseDto.Train;
 import com.ilerijava.tcdd.entegration.DTO.TicketDTO;
+import com.ilerijava.tcdd.entegration.DTO.TrainSeatsResponseDTO;
+import com.ilerijava.tcdd.entegration.DTO.TrainAvailableSeatsDTO;
+import com.ilerijava.tcdd.entegration.DTO.AvailableSeatsDTO;
+import com.ilerijava.tcdd.entegration.enums.SeatType;
 
 import org.springframework.web.client.RestClient;
 import lombok.RequiredArgsConstructor;
-
-import java.util.List;
-import java.util.ArrayList;
+import com.ilerijava.tcdd.entegration.config.RestClientConfig;
 
 @Service
 @RequiredArgsConstructor
 public class SeatService {
 
 	private final RestClient restClient;
+	private final RestClientConfig restClientConfig;
 
+	/**
+	 * Belirtilen istasyonlar arasındaki tren seferlerini getirir
+	 */
 	public SeferResponseDto getSefer(Integer fromStationId, String fromStationName, Integer toStationId,
 			String toStationName, LocalDateTime departureDate) {
 
 		SeferRequestDto requestBody = new SeferRequestDto();
-
 		requestBody.setSearchRoutes(
 				List.of(new SeferRequestDto.SearchRoutes(fromStationId, fromStationName, toStationId, toStationName,
 						departureDate)));
@@ -32,25 +42,11 @@ public class SeatService {
 		requestBody.setSearchReservation(false);
 		requestBody.setSearchType("DOMESTIC");
 
-		String url = "https://web-api-prod-ytp.tcddtasimacilik.gov.tr/tms/train/train-availability?environment=dev&userId=1";
-
-		SeferResponseDto seferResponseDto = restClient.post().uri(url)
+		return restClient.post()
+				.uri(restClientConfig.getTrainAvailabilityUrl())
 				.body(requestBody)
-				.header("Authorization",
-						"eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJlVFFicDhDMmpiakp1cnUzQVk2a0ZnV196U29MQXZIMmJ5bTJ2OUg5THhRIn0."
-								+ "eyJleHAiOjE3MjEzODQ0NzAsImlhdCI6MTcyMTM4NDQxMCwianRpIjoiYWFlNjVkNzgtNmRkZS00ZGY4LWEwZWYtYjRkNzZiYjZlODNjIiwiaXNzIjoiaHR0cDovL"
-								+ "3l0cC1wcm9kLW1hc3RlcjEudGNkZHRhc2ltYWNpbGlrLmdvdi50cjo4MDgwL3JlYWxtcy9tYXN0ZXIiLCJhdWQiOiJhY2NvdW50Iiwic3ViIjoiMDAzNDI3MmMtNTc"
-								+ "2Yi00OTBlLWJhOTgtNTFkMzc1NWNhYjA3IiwidHlwIjoiQmVhcmVyIiwiYXpwIjoidG1zIiwic2Vzc2lvbl9zdGF0ZSI6IjAwYzM4NTJiLTg1YjEtNDMxNS04OGIwLW"
-								+ "Q0MWMxMTcyYzA0MSIsImFjciI6IjEiLCJyZWFsbV9hY2Nlc3MiOnsicm9sZXMiOlsiZGVmYXVsdC1yb2xlcy1tYXN0ZXIiLCJvZmZsaW5lX2FjY2VzcyIsInVtYV9hdXR"
-								+ "ob3JpemF0aW9uIl19LCJyZXNvdXJjZV9hY2Nlc3MiOnsiYWNjb3VudCI6eyJyb2xlcyI6WyJtYW5hZ2UtYWNjb3VudCIsIm1hbmFnZS1hY2NvdW50LWxpbmtzIiwidmlldy1"
-								+ "wcm9maWxlIl19fSwic2NvcGUiOiJvcGVuaWQgZW1haWwgcHJvZmlsZSIsInNpZCI6IjAwYzM4NTJiLTg1YjEtNDMxNS04OGIwLWQ0MWMxMTcyYzA0MSIsImVtYWlsX3ZlcmlmaW"
-								+ "VkIjpmYWxzZSwicHJlZmVycmVkX3VzZXJuYW1lIjoid2ViIiwiZ2l2ZW5fbmFtZSI6IiIsImZhbWlseV9uYW1lIjoiIn0.AIW_4Qws2wfwxyVg8dgHRT9jB3qNavob2C4mEQIQGl3"
-								+ "urzW2jALPx-e51ZwHUb-TXB-X2RPHakonxKnWG6tDIP5aKhiidzXDcr6pDDoYU5DnQhMg1kywyOaMXsjLFjuYN5PAyGUMh6YSOVsg1PzNh-5GrJF44pS47JnB9zk03Pr08napjsZPo"
-								+ "RB-5N4GQ49cnx7ePC82Y7YIc-gTew2baqKQPz9_v381Gbm2V38PZDH9KldlcWut7kqQYJFMJ7dkM_entPJn9lFk7R5h5j_06OlQEpWRMQTn9SQ1AYxxmZxBu5XYMKDkn4rzIIVCkdTP"
-								+ "JNCt5PvjENjClKFeUA1DOg")
-				.header("Unit-Id", "3895").retrieve().body(SeferResponseDto.class);
-
-		return seferResponseDto;
+				.retrieve()
+				.body(SeferResponseDto.class);
 	}
 
 	public List<TicketDTO> getAvailableTickets(Integer fromStationId, String fromStationName, Integer toStationId,
@@ -102,4 +98,114 @@ public class SeatService {
 		}
 	}
 
+	/**
+	 * Belirli tarih aralığındaki müsait koltukları listeler
+	 */
+	public TrainSeatsResponseDTO getAvailableSeatsBetweenDates(
+			Integer fromStationId,
+			String fromStationName,
+			Integer toStationId,
+			String toStationName,
+			LocalDateTime startDateTime,
+			LocalDateTime endDateTime,
+			String seatType) {
+
+		String seatTypeCode = SeatType.getCodeFromType(seatType);
+		TrainSeatsResponseDTO result = new TrainSeatsResponseDTO();
+		List<TrainAvailableSeatsDTO> allTrainsList = new ArrayList<>();
+
+		LocalDateTime currentDate = startDateTime;
+		while (!currentDate.isAfter(endDateTime)) {
+			SeferResponseDto response = getSefer(fromStationId, fromStationName, toStationId, toStationName,
+					currentDate);
+			processTrainsForDate(response, fromStationId, startDateTime, endDateTime, seatTypeCode, allTrainsList);
+			currentDate = currentDate.plusDays(1);
+		}
+
+		result.setTrains(allTrainsList);
+		return result;
+	}
+
+	/**
+	 * Tren bilgilerini işler ve müsait koltukları filtreler
+	 */
+	private void processTrainsForDate(
+			SeferResponseDto response,
+			Integer fromStationId,
+			LocalDateTime startDateTime,
+			LocalDateTime endDateTime,
+			String seatTypeCode,
+			List<TrainAvailableSeatsDTO> allTrainsList) {
+
+		if (response != null && response.getTrainLegs() != null) {
+			List<TrainAvailableSeatsDTO> dailyTrains = response.getTrainLegs().stream()
+					.flatMap(leg -> leg.trainAvailabilities().stream())
+					.flatMap(availability -> availability.trains().stream())
+					.filter(train -> isValidTrain(train, fromStationId, startDateTime, endDateTime, seatTypeCode))
+					.map(train -> mapToTrainInfo(train, fromStationId, seatTypeCode))
+					.collect(Collectors.toList());
+
+			allTrainsList.addAll(dailyTrains);
+		}
+	}
+
+	/**
+	 * Trenin geçerli bir sefer ve müsait koltuk olup olmadığını kontrol eder
+	 */
+	private boolean isValidTrain(Train train, Integer fromStationId,
+			LocalDateTime startDateTime, LocalDateTime endDateTime, String seatTypeCode) {
+		return hasValidSegment(train, fromStationId, startDateTime, endDateTime)
+				&& hasAvailableSeats(train, seatTypeCode);
+	}
+
+	private boolean hasValidSegment(Train train, Integer fromStationId,
+			LocalDateTime startDateTime, LocalDateTime endDateTime) {
+		return train.trainSegments().stream().anyMatch(segment -> {
+			LocalDateTime segmentTime = segment.departureTime();
+			return !segmentTime.isBefore(startDateTime) &&
+					!segmentTime.isAfter(endDateTime) &&
+					segment.departureStationId() == fromStationId;
+		});
+	}
+
+	private boolean hasAvailableSeats(Train train, String seatTypeCode) {
+		return train.availableFareInfo().stream()
+				.flatMap(fareInfo -> fareInfo.cabinClasses().stream())
+				.anyMatch(cabinClass -> cabinClass.cabinClass().code().equals(seatTypeCode) &&
+						cabinClass.availabilityCount() > 0);
+	}
+
+	private TrainAvailableSeatsDTO mapToTrainInfo(Train train, Integer fromStationId, String seatTypeCode) {
+		TrainAvailableSeatsDTO trainInfo = new TrainAvailableSeatsDTO();
+		trainInfo.setTrainName(train.commercialName());
+		setDepartureTime(train, fromStationId, trainInfo);
+		trainInfo.setSeatInfo(createSeatInfo(train, seatTypeCode));
+		return trainInfo;
+	}
+
+	private void setDepartureTime(Train train, Integer fromStationId, TrainAvailableSeatsDTO trainInfo) {
+		train.trainSegments().stream()
+				.filter(segment -> segment.departureStationId() == fromStationId)
+				.findFirst()
+				.ifPresent(segment -> {
+					DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss");
+					trainInfo.setDepartureTime(segment.departureTime().format(formatter));
+				});
+	}
+
+	private AvailableSeatsDTO createSeatInfo(Train train, String seatTypeCode) {
+		AvailableSeatsDTO seatsInfo = new AvailableSeatsDTO();
+		train.availableFareInfo().stream()
+				.flatMap(fareInfo -> fareInfo.cabinClasses().stream())
+				.filter(cabinClass -> cabinClass.cabinClass().code().equals(seatTypeCode))
+				.forEach(cabinClass -> setSeatCount(seatsInfo, seatTypeCode, cabinClass.availabilityCount()));
+		return seatsInfo;
+	}
+
+	/**
+	 * Belirtilen koltuk tipine göre müsait koltuk sayısını ayarlar
+	 */
+	private void setSeatCount(AvailableSeatsDTO seatsInfo, String seatTypeCode, int availableCount) {
+		seatsInfo.setTotalSeats(availableCount);
+	}
 }

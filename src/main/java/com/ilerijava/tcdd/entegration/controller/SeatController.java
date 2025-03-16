@@ -16,12 +16,11 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.ArrayList;
-import java.util.stream.Collectors;
-
-import com.ilerijava.tcdd.entegration.enums.SeatType;
+import lombok.RequiredArgsConstructor;
 
 @Data
 @RestController
+@RequiredArgsConstructor
 public class SeatController {
 
 	private final SeatService seatService;
@@ -113,85 +112,22 @@ public class SeatController {
 			@PathVariable String endDate,
 			@PathVariable String seatType) {
 
-		String seatTypeCode = SeatType.getCodeFromType(seatType);
+		LocalDateTime startDateTime = parseDateTime(startDate);
+		LocalDateTime endDateTime = parseDateTime(endDate);
 
-		LocalDateTime startDateTime = LocalDateTime.parse(startDate.replace(" ", "T"),
+		return seatService.getAvailableSeatsBetweenDates(
+				fromStationId,
+				fromStationName,
+				toStationId,
+				toStationName,
+				startDateTime,
+				endDateTime,
+				seatType);
+	}
+
+	private LocalDateTime parseDateTime(String dateStr) {
+		return LocalDateTime.parse(dateStr.replace(" ", "T"),
 				DateTimeFormatter.ofPattern("dd-MM-yyyy'T'HH:mm:ss"));
-		LocalDateTime endDateTime = LocalDateTime.parse(endDate.replace(" ", "T"),
-				DateTimeFormatter.ofPattern("dd-MM-yyyy'T'HH:mm:ss"));
-
-		TrainSeatsResponseDTO result = new TrainSeatsResponseDTO();
-		List<TrainAvailableSeatsDTO> allTrainsList = new ArrayList<>();
-
-		// Başlangıç tarihinden bitiş tarihine kadar her gün için döngü
-		LocalDateTime currentDate = startDateTime;
-		while (!currentDate.isAfter(endDateTime)) {
-			SeferResponseDto response = seatService.getSefer(fromStationId, fromStationName, toStationId, toStationName,
-					currentDate);
-
-			if (response != null && response.getTrainLegs() != null) {
-				List<TrainAvailableSeatsDTO> dailyTrains = response.getTrainLegs().stream()
-						.flatMap(leg -> leg.trainAvailabilities().stream())
-						.flatMap(availability -> availability.trains().stream())
-						.filter(train -> train.trainSegments().stream().anyMatch(segment -> {
-							LocalDateTime segmentTime = segment.departureTime();
-							return !segmentTime.isBefore(startDateTime) &&
-									!segmentTime.isAfter(endDateTime) &&
-									segment.departureStationId() == fromStationId;
-						}))
-						.filter(train -> train.availableFareInfo().stream()
-								.flatMap(fareInfo -> fareInfo.cabinClasses().stream())
-								.anyMatch(cabinClass -> cabinClass.cabinClass().code().equals(seatTypeCode) &&
-										cabinClass.availabilityCount() > 0))
-						.map(train -> {
-							TrainAvailableSeatsDTO trainInfo = new TrainAvailableSeatsDTO();
-							trainInfo.setTrainName(train.commercialName());
-
-							train.trainSegments().stream()
-									.filter(segment -> segment.departureStationId() == fromStationId)
-									.findFirst()
-									.ifPresent(segment -> {
-										DateTimeFormatter formatter = DateTimeFormatter
-												.ofPattern("dd-MM-yyyy HH:mm:ss");
-										trainInfo.setDepartureTime(segment.departureTime().format(formatter));
-									});
-
-							AvailableSeatsDTO seatsInfo = new AvailableSeatsDTO();
-							train.availableFareInfo().stream()
-									.flatMap(fareInfo -> fareInfo.cabinClasses().stream())
-									.filter(cabinClass -> cabinClass.cabinClass().code().equals(seatTypeCode))
-									.forEach(cabinClass -> {
-										int availableCount = cabinClass.availabilityCount();
-										switch (seatTypeCode) {
-											case "Y1":
-												seatsInfo.setEkonomiSeats(availableCount);
-												seatsInfo.setTotalSeats(availableCount);
-												break;
-											case "B":
-												seatsInfo.setYatakliSeats(availableCount);
-												seatsInfo.setTotalSeats(availableCount);
-												break;
-											case "DSB":
-												seatsInfo.setWheelchairSeats(availableCount);
-												seatsInfo.setTotalSeats(availableCount);
-												break;
-										}
-									});
-
-							trainInfo.setSeatInfo(seatsInfo);
-							return trainInfo;
-						})
-						.collect(Collectors.toList());
-
-				allTrainsList.addAll(dailyTrains);
-			}
-
-			// Bir sonraki güne geç
-			currentDate = currentDate.plusDays(1);
-		}
-
-		result.setTrains(allTrainsList);
-		return result;
 	}
 
 }
