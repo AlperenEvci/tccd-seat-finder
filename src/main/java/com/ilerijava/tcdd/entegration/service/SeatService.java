@@ -21,13 +21,13 @@ public class SeatService {
 	private final RestClient restClient;
 
 	public SeferResponseDto getSefer(Integer fromStationId, String fromStationName, Integer toStationId,
-			String toStationName, LocalDateTime travelDate) {
+			String toStationName, LocalDateTime departureDate) {
 
 		SeferRequestDto requestBody = new SeferRequestDto();
 
 		requestBody.setSearchRoutes(
 				List.of(new SeferRequestDto.SearchRoutes(fromStationId, fromStationName, toStationId, toStationName,
-						travelDate)));
+						departureDate)));
 		requestBody.setPassengerTypeCounts(List.of(new SeferRequestDto.PassengerTypeCount(0, 1)));
 		requestBody.setSearchReservation(false);
 		requestBody.setSearchType("DOMESTIC");
@@ -101,4 +101,5 @@ public class SeatService {
 			throw new RuntimeException("Error processing tickets: " + e.getMessage(), e);
 		}
 	}
+
 }
