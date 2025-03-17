@@ -27,6 +27,7 @@ public class SeatService {
 
 	private final RestClient restClient;
 	private final RestClientConfig restClientConfig;
+	private final EmailService emailService;
 
 	/**
 	 * Belirtilen istasyonlar arasındaki tren seferlerini getirir
@@ -123,6 +124,12 @@ public class SeatService {
 		}
 
 		result.setTrains(allTrainsList);
+
+		// Mail gönderimi için kontrol
+		if (allTrainsList.stream().anyMatch(train -> train.getSeatInfo().getTotalSeats() > 0)) {
+			emailService.sendAvailableSeatsEmail(allTrainsList, fromStationName, toStationName);
+		}
+
 		return result;
 	}
 
