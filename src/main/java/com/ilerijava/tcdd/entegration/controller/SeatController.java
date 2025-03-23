@@ -7,16 +7,14 @@ import org.springframework.web.bind.annotation.RestController;
 import com.ilerijava.tcdd.entegration.service.SeatService;
 
 import com.ilerijava.tcdd.entegration.DTO.SeferResponseDto;
-import com.ilerijava.tcdd.entegration.DTO.AvailableSeatsDTO;
-import com.ilerijava.tcdd.entegration.DTO.TrainAvailableSeatsDTO;
 import com.ilerijava.tcdd.entegration.DTO.TrainSeatsResponseDTO;
 
 import org.springframework.web.bind.annotation.PathVariable;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.List;
-import java.util.ArrayList;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import com.ilerijava.tcdd.entegration.util.TrainFunctions;
 
 @Data
 @RestController
@@ -33,9 +31,7 @@ public class SeatController {
 			@PathVariable String toStationName,
 			@PathVariable String departureDate) {
 
-		// String formatındaki tarihi LocalDateTime'a çevirme
-		LocalDateTime dateTime = LocalDateTime.parse(departureDate.replace(" ", "T"),
-				DateTimeFormatter.ofPattern("dd-MM-yyyy'T'HH:mm:ss"));
+		LocalDateTime dateTime = TrainFunctions.parseDateTime(departureDate);
 
 		return seatService.getSefer(fromStationId, fromStationName, toStationId, toStationName, dateTime);
 	}
@@ -48,58 +44,14 @@ public class SeatController {
 			@PathVariable String toStationName,
 			@PathVariable String departureDate) {
 
-		LocalDateTime dateTime = LocalDateTime.parse(departureDate.replace(" ", "T"),
-				DateTimeFormatter.ofPattern("dd-MM-yyyy'T'HH:mm:ss"));
+		LocalDateTime dateTime = TrainFunctions.parseDateTime(departureDate);
 
-		SeferResponseDto response = seatService.getSefer(fromStationId, fromStationName, toStationId, toStationName,
+		return seatService.getDetailedAvailableSeats(
+				fromStationId,
+				fromStationName,
+				toStationId,
+				toStationName,
 				dateTime);
-		TrainSeatsResponseDTO result = new TrainSeatsResponseDTO();
-		List<TrainAvailableSeatsDTO> trainsList = new ArrayList<>();
-
-		if (response != null && response.getTrainLegs() != null) {
-			response.getTrainLegs().stream()
-					.flatMap(leg -> leg.trainAvailabilities().stream())
-					.flatMap(availability -> availability.trains().stream())
-					.forEach(train -> {
-						TrainAvailableSeatsDTO trainInfo = new TrainAvailableSeatsDTO();
-						trainInfo.setTrainName(train.commercialName());
-
-						// Tarihi istenen formatta set et
-						DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss");
-						trainInfo.setDepartureTime(train.trainSegments().get(0).departureTime().format(formatter));
-
-						AvailableSeatsDTO seatsInfo = new AvailableSeatsDTO();
-
-						train.availableFareInfo().stream()
-								.flatMap(fareInfo -> fareInfo.cabinClasses().stream())
-								.forEach(cabinClass -> {
-									switch (cabinClass.cabinClass().code()) {
-										case "Y1":
-											seatsInfo.setEkonomiSeats(seatsInfo.getEkonomiSeats() +
-													cabinClass.availabilityCount());
-											break;
-										case "B":
-											seatsInfo.setYatakliSeats(seatsInfo.getYatakliSeats() +
-													cabinClass.availabilityCount());
-											break;
-										case "DSB":
-											seatsInfo.setWheelchairSeats(seatsInfo.getWheelchairSeats() +
-													cabinClass.availabilityCount());
-											break;
-									}
-								});
-
-						seatsInfo.setTotalSeats(seatsInfo.getEkonomiSeats() +
-								seatsInfo.getYatakliSeats() +
-								seatsInfo.getWheelchairSeats());
-
-						trainInfo.setSeatInfo(seatsInfo);
-						trainsList.add(trainInfo);
-					});
-		}
-
-		result.setTrains(trainsList);
-		return result;
 	}
 
 	@PostMapping("/available-seats/between-dates/{fromStationId}/{fromStationName}/{toStationId}/{toStationName}/{startDate}/{endDate}/{seatType}")
@@ -112,8 +64,8 @@ public class SeatController {
 			@PathVariable String endDate,
 			@PathVariable String seatType) {
 
-		LocalDateTime startDateTime = parseDateTime(startDate);
-		LocalDateTime endDateTime = parseDateTime(endDate);
+		LocalDateTime startDateTime = TrainFunctions.parseDateTime(startDate);
+		LocalDateTime endDateTime = TrainFunctions.parseDateTime(endDate);
 
 		return seatService.getAvailableSeatsBetweenDates(
 				fromStationId,
@@ -125,9 +77,30 @@ public class SeatController {
 				seatType);
 	}
 
-	private LocalDateTime parseDateTime(String dateStr) {
-		return LocalDateTime.parse(dateStr.replace(" ", "T"),
-				DateTimeFormatter.ofPattern("dd-MM-yyyy'T'HH:mm:ss"));
+	@PostMapping("/available-seats/between-dates-paginated/{fromStationId}/{fromStationName}/{toStationId}/{toStationName}/{startDate}/{endDate}/{seatType}/{page}/{size}")
+	public Page<TrainSeatsResponseDTO> getAvailableSeatsBetweenDatesPaginated(
+			@PathVariable Integer fromStationId,
+			@PathVariable String fromStationName,
+			@PathVariable Integer toStationId,
+			@PathVariable String toStationName,
+			@PathVariable String startDate,
+			@PathVariable String endDate,
+			@PathVariable String seatType,
+			@PathVariable int page,
+			@PathVariable int size) {
+
+		LocalDateTime startDateTime = TrainFunctions.parseDateTime(startDate);
+		LocalDateTime endDateTime = TrainFunctions.parseDateTime(endDate);
+
+		return seatService.getAvailableSeatsBetweenDatesPaginated(
+				fromStationId,
+				fromStationName,
+				toStationId,
+				toStationName,
+				startDateTime,
+				endDateTime,
+				seatType,
+				PageRequest.of(page, size));
 	}
 
 }

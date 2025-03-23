@@ -1,25 +1,26 @@
 package com.ilerijava.tcdd.entegration.service;
 
 import org.springframework.stereotype.Service;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageImpl;
 
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.stream.Collectors;
 
 import com.ilerijava.tcdd.entegration.DTO.SeferRequestDto;
 import com.ilerijava.tcdd.entegration.DTO.SeferResponseDto;
-import com.ilerijava.tcdd.entegration.DTO.SeferResponseDto.Train;
 import com.ilerijava.tcdd.entegration.DTO.TicketDTO;
 import com.ilerijava.tcdd.entegration.DTO.TrainSeatsResponseDTO;
 import com.ilerijava.tcdd.entegration.DTO.TrainAvailableSeatsDTO;
-import com.ilerijava.tcdd.entegration.DTO.AvailableSeatsDTO;
 import com.ilerijava.tcdd.entegration.enums.SeatType;
 
 import org.springframework.web.client.RestClient;
 import lombok.RequiredArgsConstructor;
 import com.ilerijava.tcdd.entegration.config.RestClientConfig;
+import com.ilerijava.tcdd.entegration.util.TrainFunctions;
 
 @Service
 @RequiredArgsConstructor
@@ -54,46 +55,28 @@ public class SeatService {
 			String toStationName, LocalDateTime travelDate) {
 
 		try {
-			// Önce sefer bilgilerini al
 			SeferResponseDto response = getSefer(fromStationId, fromStationName, toStationId, toStationName,
 					travelDate);
-
-			// Bilet listesini oluştur
 			List<TicketDTO> availableTickets = new ArrayList<>();
 
 			if (response != null && response.getTrainLegs() != null) {
-				response.getTrainLegs()
-						.forEach(trainLeg -> {
-							if (trainLeg.trainAvailabilities() != null) {
-								trainLeg.trainAvailabilities()
-										.forEach(trainAvailability -> {
-											if (trainAvailability.trains() != null) {
-												trainAvailability.trains().forEach(train -> {
-													if (train.availableFareInfo() != null) {
-														train.availableFareInfo().forEach(fareInfo -> {
-															if (fareInfo.cabinClasses() != null) {
-																fareInfo.cabinClasses().forEach(cabinClass -> {
-																	TicketDTO ticketDTO = new TicketDTO();
-																	ticketDTO.setName(train.commercialName());
-																	ticketDTO.setCabinName(
-																			cabinClass.cabinClass().name());
-																	ticketDTO.setAvailabilityCount(
-																			cabinClass.availabilityCount());
-																	availableTickets.add(ticketDTO);
-																});
-															}
-														});
-													}
-												});
-											}
-										});
-							}
+				response.getTrainLegs().stream()
+						.flatMap(leg -> leg.trainAvailabilities().stream())
+						.flatMap(availability -> availability.trains().stream())
+						.forEach(train -> {
+							train.availableFareInfo().stream()
+									.flatMap(fareInfo -> fareInfo.cabinClasses().stream())
+									.forEach(cabinClass -> {
+										TicketDTO ticketDTO = new TicketDTO();
+										ticketDTO.setName(train.commercialName());
+										ticketDTO.setCabinName(cabinClass.cabinClass().name());
+										ticketDTO.setAvailabilityCount(cabinClass.availabilityCount());
+										availableTickets.add(ticketDTO);
+									});
 						});
 			}
-
 			return availableTickets;
 		} catch (Exception e) {
-			// Log the exception for debugging
 			e.printStackTrace();
 			throw new RuntimeException("Error processing tickets: " + e.getMessage(), e);
 		}
@@ -112,20 +95,13 @@ public class SeatService {
 			String seatType) {
 
 		String seatTypeCode = SeatType.getCodeFromType(seatType);
+		List<TrainAvailableSeatsDTO> allTrainsList = collectTrainsForDateRange(
+				fromStationId, fromStationName, toStationId, toStationName,
+				startDateTime, endDateTime, seatTypeCode);
+
 		TrainSeatsResponseDTO result = new TrainSeatsResponseDTO();
-		List<TrainAvailableSeatsDTO> allTrainsList = new ArrayList<>();
-
-		LocalDateTime currentDate = startDateTime;
-		while (!currentDate.isAfter(endDateTime)) {
-			SeferResponseDto response = getSefer(fromStationId, fromStationName, toStationId, toStationName,
-					currentDate);
-			processTrainsForDate(response, fromStationId, startDateTime, endDateTime, seatTypeCode, allTrainsList);
-			currentDate = currentDate.plusDays(1);
-		}
-
 		result.setTrains(allTrainsList);
 
-		// Mail gönderimi için kontrol
 		if (allTrainsList.stream().anyMatch(train -> train.getSeatInfo().getTotalSeats() > 0)) {
 			emailService.sendAvailableSeatsEmail(allTrainsList, fromStationName, toStationName);
 		}
@@ -136,83 +112,107 @@ public class SeatService {
 	/**
 	 * Tren bilgilerini işler ve müsait koltukları filtreler
 	 */
-	private void processTrainsForDate(
-			SeferResponseDto response,
+	private List<TrainAvailableSeatsDTO> collectTrainsForDateRange(
 			Integer fromStationId,
+			String fromStationName,
+			Integer toStationId,
+			String toStationName,
 			LocalDateTime startDateTime,
 			LocalDateTime endDateTime,
-			String seatTypeCode,
-			List<TrainAvailableSeatsDTO> allTrainsList) {
+			String seatTypeCode) {
 
-		if (response != null && response.getTrainLegs() != null) {
-			List<TrainAvailableSeatsDTO> dailyTrains = response.getTrainLegs().stream()
-					.flatMap(leg -> leg.trainAvailabilities().stream())
-					.flatMap(availability -> availability.trains().stream())
-					.filter(train -> isValidTrain(train, fromStationId, startDateTime, endDateTime, seatTypeCode))
-					.map(train -> mapToTrainInfo(train, fromStationId, seatTypeCode))
-					.collect(Collectors.toList());
+		List<TrainAvailableSeatsDTO> allTrains = new ArrayList<>();
+		LocalDateTime currentDate = startDateTime;
 
-			allTrainsList.addAll(dailyTrains);
+		while (!currentDate.isAfter(endDateTime)) {
+			SeferResponseDto response = getSefer(fromStationId, fromStationName, toStationId, toStationName,
+					currentDate);
+			allTrains.addAll(processTrainsFromResponse(response, fromStationId, seatTypeCode));
+			currentDate = currentDate.plusDays(1);
 		}
+
+		return allTrains;
 	}
 
-	/**
-	 * Trenin geçerli bir sefer ve müsait koltuk olup olmadığını kontrol eder
-	 */
-	private boolean isValidTrain(Train train, Integer fromStationId,
-			LocalDateTime startDateTime, LocalDateTime endDateTime, String seatTypeCode) {
-		return hasValidSegment(train, fromStationId, startDateTime, endDateTime)
-				&& hasAvailableSeats(train, seatTypeCode);
+	private List<TrainAvailableSeatsDTO> processTrainsFromResponse(
+			SeferResponseDto response,
+			Integer fromStationId,
+			String seatTypeCode) {
+
+		if (response == null || response.getTrainLegs() == null) {
+			return new ArrayList<>();
+		}
+
+		return response.getTrainLegs().stream()
+				.flatMap(leg -> leg.trainAvailabilities().stream())
+				.flatMap(availability -> availability.trains().stream())
+				.map(train -> {
+					TrainAvailableSeatsDTO trainInfo = new TrainAvailableSeatsDTO();
+					trainInfo.setTrainName(train.commercialName());
+
+					// TrainFunctions kullanarak kalkış zamanını ayarla
+					train.trainSegments().stream()
+							.filter(segment -> segment.departureStationId() == fromStationId)
+							.findFirst()
+							.ifPresent(segment -> trainInfo.setDepartureTime(
+									TrainFunctions.formatDepartureTime(segment.departureTime())));
+
+					// TrainFunctions kullanarak koltuk bilgilerini ayarla
+					trainInfo.setSeatInfo(TrainFunctions.createSeatInfo(train, seatTypeCode));
+					return trainInfo;
+				})
+				.collect(Collectors.toList());
 	}
 
-	private boolean hasValidSegment(Train train, Integer fromStationId,
-			LocalDateTime startDateTime, LocalDateTime endDateTime) {
-		return train.trainSegments().stream().anyMatch(segment -> {
-			LocalDateTime segmentTime = segment.departureTime();
-			return !segmentTime.isBefore(startDateTime) &&
-					!segmentTime.isAfter(endDateTime) &&
-					segment.departureStationId() == fromStationId;
-		});
+	public Page<TrainSeatsResponseDTO> getAvailableSeatsBetweenDatesPaginated(
+			Integer fromStationId,
+			String fromStationName,
+			Integer toStationId,
+			String toStationName,
+			LocalDateTime startDateTime,
+			LocalDateTime endDateTime,
+			String seatType,
+			Pageable pageable) {
+
+		String seatTypeCode = SeatType.getCodeFromType(seatType);
+		List<TrainAvailableSeatsDTO> allTrains = collectTrainsForDateRange(
+				fromStationId, fromStationName, toStationId, toStationName,
+				startDateTime, endDateTime, seatTypeCode);
+
+		return createPaginatedResponse(allTrains, pageable);
 	}
 
-	private boolean hasAvailableSeats(Train train, String seatTypeCode) {
-		return train.availableFareInfo().stream()
-				.flatMap(fareInfo -> fareInfo.cabinClasses().stream())
-				.anyMatch(cabinClass -> cabinClass.cabinClass().code().equals(seatTypeCode) &&
-						cabinClass.availabilityCount() > 0);
+	private Page<TrainSeatsResponseDTO> createPaginatedResponse(
+			List<TrainAvailableSeatsDTO> allTrains,
+			Pageable pageable) {
+
+		int start = (int) pageable.getOffset();
+		start = Math.min(start, allTrains.size());
+		int end = Math.min((start + pageable.getPageSize()), allTrains.size());
+
+		List<TrainSeatsResponseDTO> pageContent = new ArrayList<>();
+		if (!allTrains.isEmpty()) {
+			List<TrainAvailableSeatsDTO> paginatedTrains = allTrains.subList(start, end);
+			TrainSeatsResponseDTO responseDTO = new TrainSeatsResponseDTO();
+			responseDTO.setTrains(paginatedTrains);
+			pageContent.add(responseDTO);
+		}
+
+		return new PageImpl<>(pageContent, pageable, allTrains.size());
 	}
 
-	private TrainAvailableSeatsDTO mapToTrainInfo(Train train, Integer fromStationId, String seatTypeCode) {
-		TrainAvailableSeatsDTO trainInfo = new TrainAvailableSeatsDTO();
-		trainInfo.setTrainName(train.commercialName());
-		setDepartureTime(train, fromStationId, trainInfo);
-		trainInfo.setSeatInfo(createSeatInfo(train, seatTypeCode));
-		return trainInfo;
-	}
+	public TrainSeatsResponseDTO getDetailedAvailableSeats(
+			Integer fromStationId,
+			String fromStationName,
+			Integer toStationId,
+			String toStationName,
+			LocalDateTime dateTime) {
 
-	private void setDepartureTime(Train train, Integer fromStationId, TrainAvailableSeatsDTO trainInfo) {
-		train.trainSegments().stream()
-				.filter(segment -> segment.departureStationId() == fromStationId)
-				.findFirst()
-				.ifPresent(segment -> {
-					DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss");
-					trainInfo.setDepartureTime(segment.departureTime().format(formatter));
-				});
-	}
+		SeferResponseDto response = getSefer(fromStationId, fromStationName, toStationId, toStationName, dateTime);
+		List<TrainAvailableSeatsDTO> trainsList = processTrainsFromResponse(response, fromStationId, "ALL");
 
-	private AvailableSeatsDTO createSeatInfo(Train train, String seatTypeCode) {
-		AvailableSeatsDTO seatsInfo = new AvailableSeatsDTO();
-		train.availableFareInfo().stream()
-				.flatMap(fareInfo -> fareInfo.cabinClasses().stream())
-				.filter(cabinClass -> cabinClass.cabinClass().code().equals(seatTypeCode))
-				.forEach(cabinClass -> setSeatCount(seatsInfo, seatTypeCode, cabinClass.availabilityCount()));
-		return seatsInfo;
-	}
-
-	/**
-	 * Belirtilen koltuk tipine göre müsait koltuk sayısını ayarlar
-	 */
-	private void setSeatCount(AvailableSeatsDTO seatsInfo, String seatTypeCode, int availableCount) {
-		seatsInfo.setTotalSeats(availableCount);
+		TrainSeatsResponseDTO result = new TrainSeatsResponseDTO();
+		result.setTrains(trainsList);
+		return result;
 	}
 }
